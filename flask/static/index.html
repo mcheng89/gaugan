@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>GauGAN | Landscape Sketch</title>
+
+    <script src="https://unpkg.com/react@16/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@16/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/atrament.js/1.0.0/atrament.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.13.0/js/all.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet">
+
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+        }
+        * {
+            box-sizing: border-box;
+        }
+        #root {
+            flex: 1;
+            display: flex;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="root"></div>
+
+    <style>
+        .container {
+            display: flex;
+            flex: 1;
+            justify-content: center;
+            align-items: center;
+
+            background: #111111;
+            color: #cccccc;
+            font-family: 'Roboto', sans-serif;
+        }
+
+        #sketchpad, #rendered {
+            width: 512px;
+            height: 512px;
+            background: #262626;
+            margin: 5px;
+        }
+
+        #rendered {
+            display: flex;
+            position: relative;
+            /* background: url(https://upload.wikimedia.org/wikipedia/commons/3/35/Neckertal_20150527-6384.jpg); */
+        }
+        .no-render {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            /* display:none; */
+        }
+        .no-render .icon {
+            font-size: 80px;
+            color: #adadad;
+        }
+        .no-render .label {
+            font-size: 12px;
+            margin-top: 8px;
+            color: #adadad;
+            width: 190px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .generated-image {
+            flex-grow: 1;
+        }
+        .btn-render {
+            position: absolute;
+            background: rgba(15, 48, 214, 0.5);
+            color: #e8e8e8;
+            width: 160px;
+            border-radius: 3px;
+            text-align: center;
+            padding: 10px;
+            bottom: 40px;
+            left: 50%;
+            margin-left: -80px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn-render:hover {
+            background: rgba(15, 48, 214, 0.7);
+            padding: 11px;
+            bottom: 39px;
+            width: 162px;
+            margin-left: -81px;
+        }
+
+        #toolbar {
+            background: #303030;
+            width: 200px;
+            height: 512px;
+            margin: 5px;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            font-size: 14px;
+        }
+        #toolbar .row {
+            margin-bottom: 5px;
+        }
+        #toolbar .label {
+            padding: 3px 3px 8px;
+        }
+        #toolbar .field {
+            padding: 3px;
+        }
+        #toolbar .color-panel {
+            flex-grow: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        #toolbar .scroll {
+            overflow: scroll;
+            background: rgba(0,0,0,.3);
+            padding: 4px;
+            flex-grow: 1;
+        }
+        #toolbar .color {
+            padding: 5px;
+            margin: 5px;
+            color: white;
+        }
+
+        input {
+            width: 98%;
+        }
+        input[type="button"] {
+            padding: 7px;
+            background: #676767;
+            color: white;
+            border: 0;
+            border-radius: 3px;
+            font-size: 13px;
+            margin: 5px 0;
+            cursor: pointer;
+        }
+    </style>
+    <script type="text/babel">
+        const colorMap = [
+            { color: "#384f83", id: 154, label: "sea" },
+            { color: "#efefef", id: 105, label: "cloud", labelColor: "black" },
+            { color: "#2c1e16", id: 110, label: "dirt" },
+            { color: "#5d6e32", id: 96, label: "bush" },
+            { color: "#b7d24e", id: 123, label: "grass", labelColor: "black" },
+            { color: "#3c3b4b", id: 134, label: "mountain" },
+            { color: "#987e6a", id: 148, label: "road" },
+            { color: "#759edf", id: 156, label: "sky" },
+            { color: "#352613", id: 168, label: "tree" },
+            { color: "#e670b6", id: 118, label: "flower" },
+            { color: "#c1c3c9", id: 119, label: "fog", labelColor: "black" },
+            { color: "#776c2d", id: 126, label: "hill" },
+            { color: "#bf602c", id: 128, label: "leaves" },
+            { color: "#32604d", id: 147, label: "river" },
+            { color: "#fafafa", id: 158, label: "snow", labelColor: "black" },
+        ];
+        const hexToColorMap = colorMap.reduce((combined, color) => {
+            combined[color.color] = color;
+            return combined;
+        }, {});
+        function componentToHex(c) {
+            const hex = c.toString(16);
+            return hex.length == 1 ? "0" + hex : hex;
+        }
+        function rgbToHex(r, g, b) {
+            return "#" + componentToHex(r) + componentToHex(g) + componentToHex(b);
+        }
+
+        class SketchBoard extends React.Component {
+            constructor(props) {
+                super(props);
+                this.canvasRef = React.createRef();
+                this.state = {
+                    image: null,
+                    strokeWidth: 18,
+                };
+            }
+
+            componentDidMount() {
+                this.sketchpad = new Atrament(this.canvasRef.current, {
+                    width: 512,
+                    height: 512,
+                });
+                this.clearSketch();
+                // change the line thickness in pixels
+                this.sketchpad.weight = this.state.strokeWidth;
+                // tweak smoothing - higher values make the drawings look much better, 
+                // lower values make drawing feel a bit more responsive. Set to 0.85 by default.
+                this.sketchpad.smoothing = .45;
+                this.sketchpad.adaptiveStroke = false;
+            }
+
+            clearSketch = () => {
+                this.sketchpad.clear();
+                this.setSketchColor(colorMap.find(c => c.label == "sky").color);
+                this.sketchpad.fill();
+                // fill uses setTimeout of 100, so we need a bigger timeout...
+                setTimeout(() => {
+                    this.setSketchColor(colorMap.find(c => c.label == "grass").color);
+                }, 250);
+            }
+
+            setSketchColor = (color) => {
+                this.sketchpad.color = color;
+            }
+
+            setSketchStrokeWidth = (width) => {
+                this.sketchpad.weight = this.state.strokeWidth;
+                this.setState({
+                    strokeWidth: width,
+                });
+            }
+
+            generateSketch = async () => {
+                const context = this.sketchpad.context;
+                const colorLayer = context.getImageData(0, 0, context.canvas.width, context.canvas.height).data;
+                
+                const colors = [];
+                const sketch = [];
+                let match_id = 255;
+                for (let y = 0; y < context.canvas.height; y++) {
+                    sketch[y] = [];
+                    for (let x = 0; x < context.canvas.width; x++) {
+                        const pixelPos = (y * context.canvas.width + x) * 4;
+                        const pixelR = colorLayer[pixelPos];
+                        const pixelG = colorLayer[pixelPos + 1];
+                        const pixelB = colorLayer[pixelPos + 2];
+                        
+                        const color_match = hexToColorMap[rgbToHex(pixelR, pixelG, pixelB)];
+                        if (color_match) {
+                            match_id = color_match.id;
+                        }
+                        sketch[y][x] = match_id;
+                    }
+                }
+                console.log(sketch)
+
+                const response = await fetch('/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(sketch)
+                });
+                this.setState({
+                    image: URL.createObjectURL(await response.blob()),
+                });
+            }
+
+            render() {
+                return <React.Fragment>
+                    <div className="container">
+                        <div id="toolbar">
+                            <div className="row">
+                                <input type="button" value="Clear" onClick={() => this.clearSketch()} />
+                            </div>
+                            <div className="row">
+                                <div className="label">Stroke Thickness: {this.state.strokeWidth}px</div>
+                                <div className="field">
+                                    <input type="range" min="1" max="80" 
+                                        value={this.state.strokeWidth}
+                                        onChange={(e) => this.setSketchStrokeWidth(parseInt(e.target.value))} />
+                                </div>
+                            </div>
+                            <div className="row color-panel">
+                                <div className="label">Color Palette:</div>
+                                <div className="scroll">
+                                    {colorMap.map(c => 
+                                        <div key={c.color} className="color" style={{
+                                            'background': c.color, 
+                                            'color': c.labelColor || 'white',
+                                            'textShadow': c.labelColor ? '' : '0 0 1px black' 
+                                        }} onClick={() => this.setSketchColor(c.color)}>{c.label}</div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                        <canvas id="sketchpad" ref={this.canvasRef}></canvas>
+                        <div id="rendered">
+                            {this.state.image ? null : <div className="no-render">
+                                <div className="icon"><i className="far fa-images"></i></div>
+                                <div className="label">Paint something then click the render button below!</div>
+                            </div>}
+                            {this.state.image ? <img className="generated-image" src={this.state.image} /> : null}
+                            <div className="btn-render" onClick={this.generateSketch}>Generate Image</div>
+                        </div>
+                    </div>
+                </React.Fragment>;
+            }
+        }
+
+        ReactDOM.render(
+            <SketchBoard />,
+            document.getElementById('root')
+        );
+    </script>
+</body>
+
+</html>
